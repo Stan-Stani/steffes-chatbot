@@ -8,6 +8,15 @@ export interface LlmModelConfig extends OpenAIModel {
   endpoint: string;
   apiKey?: string;
   /**
+   * Optional provider hint. If set to `anthropic`, requests will be sent to the Anthropic Messages API.
+   * Defaults to OpenAI-compatible chat/completions.
+   */
+  provider?: string;
+  /**
+   * Underlying provider model name (e.g. `claude-opus-4-5` for Anthropic Messages API).
+   */
+  model?: string;
+  /**
    * Extra request fields to merge into the chat/completions payload.
    * - If a value is `null`, that field will be removed from the payload.
    */
@@ -61,6 +70,9 @@ export function getLlmModelConfigsFromEnv(): LlmModelConfig[] {
     assertString(obj.endpoint, `models[${index}].endpoint`);
 
     const apiKey = typeof obj.apiKey === 'string' ? obj.apiKey : undefined;
+    const provider =
+      typeof obj.provider === 'string' ? obj.provider : undefined;
+    const model = typeof obj.model === 'string' ? obj.model : undefined;
 
     const maxLength = asNumberOrDefault(obj.maxLength, 12000);
     const tokenLimit = asNumberOrDefault(obj.tokenLimit, 4000);
@@ -77,6 +89,8 @@ export function getLlmModelConfigsFromEnv(): LlmModelConfig[] {
       name: obj.name,
       endpoint: obj.endpoint,
       apiKey,
+      provider,
+      model,
       maxLength,
       tokenLimit,
       request,

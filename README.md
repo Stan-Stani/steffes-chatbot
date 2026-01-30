@@ -6,8 +6,12 @@
 # Configuring LLMs
 
 LLM models are configured via a single JSON env var.
-Each entry uses a fully-qualified Azure OpenAI chat/completions URL and an API key.
-Allowed entry properties: id, name, endpoint, apiKey, maxLength, tokenLimit, request
+Each entry uses either:
+
+- an OpenAI-compatible **Chat Completions** endpoint, or
+- an Anthropic **Messages API** endpoint.
+
+Allowed entry properties: id, name, endpoint, apiKey, maxLength, tokenLimit, request, provider, model
 
 ## `LLM_MODELS_JSON` format
 
@@ -15,16 +19,45 @@ This app reads `LLM_MODELS_JSON` at runtime and:
 
 - Uses `id`, `name`, `maxLength`, `tokenLimit` for the UI model list.
 - Uses `endpoint` + `apiKey` (or an override entered in the UI) for server calls.
-- Builds an Azure OpenAI **Chat Completions** request body and then merges any optional per-model overrides from `request`.
+- Builds either an OpenAI-compatible **Chat Completions** request body or an Anthropic **Messages API** request body, then merges any optional per-model overrides from `request`.
 
 Important:
 
-- `endpoint` must be a **fully-qualified** Chat Completions URL (it should include `/openai/deployments/<deployment>/chat/completions?api-version=...`).
-- If you edit `.env.local`, restart `npm run dev` so Next.js reloads environment variables.
+- For OpenAI-compatible models, `endpoint` must be a **fully-qualified** Chat Completions URL (it should include `/openai/deployments/<deployment>/chat/completions?api-version=...`).
+- For Anthropic models, set:
+  - `provider: "anthropic"`
+  - `model: "claude-..."` (e.g. `claude-opus-4-5`)
+  - `endpoint` to your Anthropic Messages URL (typically ends with `/anthropic/v1/messages`).
+
+## Anthropic example
+
+This matches the Azure-hosted Anthropic Messages API shape:
+
+```json
+[
+  {
+    "id": "opus",
+    "name": "Claude Opus 4.5",
+    "provider": "anthropic",
+    "model": "claude-opus-4-5",
+    "endpoint": "https://your-resource.services.ai.azure.com/anthropic/v1/messages",
+    "apiKey": "...",
+    "request": {
+      "max_tokens": 1000,
+      "temperature": 0.7
+    }
+  }
+]
+```
 
 ## `request` overrides
 
 If you want to send additional request fields (or override defaults) they must go under the `request` object.
+
+Notes:
+
+- For OpenAI-compatible models, `request` fields are merged into the Chat Completions JSON.
+- For Anthropic (`provider: "anthropic"`), `request` fields are merged into the Messages API JSON.
 
 Example:
 

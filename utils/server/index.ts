@@ -31,6 +31,14 @@ export const OpenAIStream = async (
   const modelEndpoint = modelConfig.endpoint;
   const apiKey = key ? key : modelConfig.apiKey;
 
+  const provider = (modelConfig.provider || '').toLowerCase();
+  const isAnthropic =
+    provider === 'anthropic' || modelEndpoint.includes('/anthropic/v1');
+
+  if (isAnthropic) {
+    return AnthropicStream(modelConfig, systemPrompt, apiKey ?? '', messages);
+  }
+
   if (!apiKey) {
     throw new Error(
       `No API key provided for model "${model.id}" (set apiKey in LLM_MODELS_JSON or provide a key in the UI)`,
@@ -58,7 +66,6 @@ export const OpenAIStream = async (
       }
     }
   }
-  console.log('lalonde', modelConfig);
 
   const res = await fetch(`${modelEndpoint}`, {
     headers: {
@@ -135,3 +142,137 @@ export const OpenAIStream = async (
 
   return stream;
 };
+
+async function AnthropicStream(
+  modelConfig: {
+    endpoint: string;
+    apiKey?: string;
+    model?: string;
+    request?: Record<string, any>;
+  },
+  systemPrompt: string,
+  apiKey: string,
+  messages: Message[],
+): Promise<ReadableStream> {
+  if (!apiKey) {
+    throw new Error(
+      `No API key provided for model "${
+        modelConfig.model ?? 'anthropic'
+      }" (set apiKey in LLM_MODELS_JSON or provide a key in the UI)`,
+    );
+  }
+
+  const endpoint = modelConfig.endpoint.endsWith('/messages')
+    ? modelConfig.endpoint
+    : `${modelConfig.endpoint.replace(/\/$/, '')}/messages`;
+
+  const anthropicModel = modelConfig.model;
+  if (!anthropicModel) {
+    throw new Error(
+      'Anthropic model config is missing "model" (e.g. "claude-opus-4-5").',
+    );
+  }
+
+  const baseBody: Record<string, any> = {
+    model: anthropicModel,
+    system: systemPrompt,
+    messages: messages.map((m) => ({ role: m.role, content: m.content })),
+    stream: true,
+    max_tokens: 1000,
+    temperature: 0.7,
+  };
+
+  if (modelConfig.request) {
+    for (const [field, value] of Object.entries(modelConfig.request)) {
+      if (value === null) {
+        delete baseBody[field];
+      } else {
+        baseBody[field] = value;
+      }
+    }
+  }
+
+  const res = await fetch(endpoint, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify(baseBody),
+  });
+
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder();
+
+  if (res.status !== 200) {
+    let bodyText = '';
+    try {
+      bodyText = await res.text();
+    } catch {
+      bodyText = '';
+    }
+    throw new Error(
+      `Anthropic API returned an error: ${res.status} ${res.statusText}${
+        bodyText ? ` - ${bodyText}` : ''
+      }`,
+    );
+  }
+
+  const contentType = res.headers.get('content-type') || '';
+  const isSse = contentType.includes('text/event-stream');
+
+  if (!isSse) {
+    // Non-stream fallback: convert a single JSON response into a ReadableStream.
+    const json = await res.json();
+    const text = Array.isArray(json?.content)
+      ? json.content
+          .filter((c: any) => c?.type === 'text' && typeof c?.text === 'string')
+          .map((c: any) => c.text)
+          .join('')
+      : '';
+    return new ReadableStream({
+      start(controller) {
+        if (text) controller.enqueue(encoder.encode(text));
+        controller.close();
+      },
+    });
+  }
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const onParse = (event: ParsedEvent | ReconnectInterval) => {
+        if (event.type !== 'event') return;
+        const data = event.data;
+        if (!data) return;
+
+        try {
+          const json = JSON.parse(data);
+          // Anthropic Messages streaming events.
+          // We enqueue deltas from content_block_delta (delta.text).
+          if (json?.type === 'content_block_delta') {
+            const text = json?.delta?.text;
+            if (typeof text === 'string' && text.length > 0) {
+              controller.enqueue(encoder.encode(text));
+            }
+            return;
+          }
+          if (json?.type === 'message_stop') {
+            controller.close();
+            return;
+          }
+        } catch (e) {
+          console.error(e);
+          console.trace(e);
+        }
+      };
+
+      const parser = createParser(onParse);
+      for await (const chunk of res.body as any) {
+        parser.feed(decoder.decode(chunk));
+      }
+    },
+  });
+
+  return stream;
+}
