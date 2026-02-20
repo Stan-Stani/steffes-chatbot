@@ -1,6 +1,7 @@
 import { ChatBody, Message } from '@/types/chat';
 import { DEFAULT_SYSTEM_PROMPT } from '@/utils/app/const';
-import { OpenAIError, OpenAIStream } from '@/utils/server';
+import { OpenAIStream } from '@/utils/server';
+import { parseIdentityInfoFromHeaders } from '@/utils/server/identity';
 import tiktokenModel from '@dqbd/tiktoken/encoders/cl100k_base.json';
 import { Tiktoken, init } from '@dqbd/tiktoken/lite/init';
 import { ChatLogger } from '../../steffes-packages/chat-logger';
@@ -14,7 +15,7 @@ export const config = {
 const chatLogger = new ChatLogger();
 const handler = async (req: Request): Promise<Response> => {
   try {
-    const identityInfo = parseIdentityInfo(req);
+    const identityInfo = parseIdentityInfoFromHeaders(req.headers);
     const { model, messages, key, prompt } = (await req.json()) as ChatBody;
 
     await init((imports) => WebAssembly.instantiate(wasm, imports));
@@ -88,32 +89,6 @@ const handler = async (req: Request): Promise<Response> => {
 export default handler;
 
 /** @section Helpers */
-
-/** Assumes we are using Microsoft Entra */
-function parseIdentityInfo(req: Request) {
-  let info: {
-    userName: string;
-    userId: string;
-    identityProvider: string;
-  } | null = {
-    userName: req.headers.get('x-ms-client-principal-name') ?? '',
-    userId: req.headers.get('x-ms-client-principal-id') ?? '',
-    identityProvider: req.headers.get('x-ms-client-principal-idp') ?? '',
-  };
-
-  console.log({ userInfo: info });
-
-  let hasData = false;
-  for (const key in info) {
-    if (info[key] !== '') {
-      hasData = true;
-    }
-  }
-  if (hasData === false) {
-    info = null;
-  }
-  return info;
-}
 
 async function readStreamToString(stream) {
   const reader = stream.getReader();

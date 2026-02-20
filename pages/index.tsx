@@ -258,6 +258,8 @@ const Home: React.FC<HomeProps> = ({
                 prompt: updatedConversation.prompt,
                 messages: updatedConversation.messages.slice(0, -1),
                 assistantMessage: assistantMessage.content,
+                conversationId: updatedConversation.id,
+                assistantMessageIndex,
               }),
             });
 
@@ -290,6 +292,24 @@ const Home: React.FC<HomeProps> = ({
               };
 
               setSelectedConversation(updatedConversation);
+
+              // Best-effort persistence of per-user running totals.
+              void fetch('/api/usage', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                  conversationId: updatedConversation.id,
+                  assistantMessageIndex,
+                  modelId: updatedConversation.model.id,
+                  pricingModelId: costData.pricingModelId,
+                  priced: costData.priced,
+                  inputTokens: costData.inputTokens,
+                  outputTokens: costData.outputTokens,
+                  totalCostUSD: costData.totalCostUSD,
+                }),
+              });
             }
             if (!costResponse.ok) {
               console.warn('Cost endpoint returned non-OK response', {

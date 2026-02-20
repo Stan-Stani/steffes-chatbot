@@ -20,6 +20,8 @@ export interface CostBody {
   messages: Message[];
   prompt: string;
   assistantMessage: string;
+  conversationId?: string;
+  assistantMessageIndex?: number;
 }
 
 export interface CostResponse {

@@ -1,5 +1,5 @@
-import { CostBody, CostResponse } from '@/types/chat';
-import { getModelConfigById } from '@/utils/server/llmModels';
+import { CostBody, CostResponse } from '../../types/chat';
+import { getModelConfigById } from '../../utils/server/llmModels';
 import tiktokenModel from '@dqbd/tiktoken/encoders/cl100k_base.json';
 import { Tiktoken, init } from '@dqbd/tiktoken/lite/init';
 import { calcPrice } from '@pydantic/genai-prices';
@@ -81,7 +81,8 @@ const handler = async (req: Request): Promise<Response> => {
   } catch (error) {
     console.error(error);
 
-    return new Response('Error', { status: 500, statusText: error.message });
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    return new Response('Error', { status: 500, statusText: message });
   }
 };
 

@@ -21,16 +21,29 @@ export class ChatLogger {
       const endpoint = process.env['COSMOS_ENDPOINT'];
       const key = process.env['COSMOS_KEY'];
 
+      if (!endpoint || !key) {
+        deferred.reject(new Error('Missing COSMOS_ENDPOINT or COSMOS_KEY'));
+        return;
+      }
+
+      const databaseId = process.env['COSMOS_DATABASE_ID'] || 'dev-2025-04-29';
+      const containerId = process.env['COSMOS_CONTAINER_ID'] || 'Chatbot';
+
       try {
         const client = new CosmosClient({ endpoint, key });
 
         const { database } = await client.databases.createIfNotExists({
-          id: 'dev-2025-04-29',
+          id: databaseId,
         });
 
         database.containers
           .createIfNotExists({
-            id: 'Chatbot',
+            id: containerId,
+            // Match existing behavior (items are created without an explicit partition key field).
+            // Using /id allows any item with an `id` to be written without extra schema constraints.
+            partitionKey: {
+              paths: ['/id'],
+            },
           })
           .then((containerResponse) => {
             deferred.resolve(containerResponse);
