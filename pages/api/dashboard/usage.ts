@@ -183,7 +183,7 @@ export default async function handler(
       if (e.priced) existingModel.pricedAssistantMessages += 1;
       byModelMap.set(model, existingModel);
 
-      const userId = (e.userId ?? 'unknown').toString();
+      const userId = (e.userId ?? 'anonymous').toString();
       const existingUser = byUserMap.get(userId) ?? {
         userId,
         totalCostUSD: 0,
